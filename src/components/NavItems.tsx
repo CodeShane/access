@@ -13,7 +13,7 @@ import UserIcon from '@mui/icons-material/Person';
 import GroupIcon from '@mui/icons-material/People';
 import RoleIcon from '@mui/icons-material/Diversity3';
 import AppIcon from '@mui/icons-material/AppShortcut';
-import AccessRequestIcon from '@mui/icons-material/MoreTime';
+import AccessRequestIcon from './icons/MoreTime';
 import RequestFromMe from '@mui/icons-material/AssignmentInd';
 import RequestToMe from '@mui/icons-material/AssignmentReturn';
 import RequestAll from '@mui/icons-material/Assignment';
@@ -21,6 +21,7 @@ import ExpiringGroupsIcon from '@mui/icons-material/RunningWithErrors';
 import ExpiringRolesIcon from '@mui/icons-material/HeartBroken';
 import ExpiringMyAccess from '@mui/icons-material/AccountBox';
 import ExpiringOwnedByMe from '@mui/icons-material/AccountTree';
+import ExpiringRolesOwnedByMe from '@mui/icons-material/HowToReg';
 import ExpiringAll from '@mui/icons-material/SwitchAccount';
 import RoleRequestIcon from '@mui/icons-material/WorkHistory';
 
@@ -157,8 +158,14 @@ export default function NavItems(props: NavItemsProps) {
         <List disablePadding>
           <ListItemLink
             to="/expiring-roles?owner_id=@me"
-            displayText="Owned by Me"
+            displayText="Owned Groups"
             displayIcon={<ExpiringOwnedByMe />}
+            sx={{pl: 4}}
+          />
+          <ListItemLink
+            to="/expiring-roles?role_owner_id=@me"
+            displayText="Owned Roles"
+            displayIcon={<ExpiringRolesOwnedByMe />}
             sx={{pl: 4}}
           />
           <ListItemLink to="/expiring-roles" displayText="All" displayIcon={<ExpiringAll />} sx={{pl: 4}} />

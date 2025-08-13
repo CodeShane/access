@@ -966,6 +966,10 @@
           "type": "string",
           "x-nullable": true
         },
+        "should_expire": {
+          "readOnly": true,
+          "type": "boolean"
+        },
         "created_reason": {
           "maxLength": 1024,
           "readOnly": true,
@@ -1216,6 +1220,10 @@
           "maxLength": 1024,
           "readOnly": true,
           "type": "string"
+        },
+        "should_expire": {
+          "readOnly": true,
+          "type": "boolean"
         },
         "id": {
           "readOnly": true,
@@ -1797,6 +1805,12 @@
           },
           {
             "in": "query",
+            "name": "needs_review",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "in": "query",
             "name": "app_owner",
             "required": false,
             "type": "boolean"
@@ -1841,6 +1855,12 @@
           {
             "in": "query",
             "name": "owner_id",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "name": "role_owner_id",
             "required": false,
             "type": "string"
           },
@@ -1898,6 +1918,12 @@
           {
             "in": "query",
             "name": "active",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "in": "query",
+            "name": "needs_review",
             "required": false,
             "type": "boolean"
           },
@@ -2453,6 +2479,12 @@
           {
             "in": "query",
             "name": "q",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "name": "owner_id",
             "required": false,
             "type": "string"
           }

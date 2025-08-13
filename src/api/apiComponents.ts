@@ -177,6 +177,7 @@ export type GetGroupRoleAuditsQueryParams = {
   q?: string;
   owner?: boolean;
   active?: boolean;
+  needs_review?: boolean;
   app_owner?: boolean;
   managed?: boolean;
   /**
@@ -190,6 +191,7 @@ export type GetGroupRoleAuditsQueryParams = {
   group_id?: string;
   role_id?: string;
   owner_id?: string;
+  role_owner_id?: string;
   start_date?: number;
   end_date?: number;
 };
@@ -233,6 +235,7 @@ export type GetUserGroupAuditsQueryParams = {
   q?: string;
   owner?: boolean;
   active?: boolean;
+  needs_review?: boolean;
   managed?: boolean;
   /**
    * @default created_at
@@ -845,6 +848,7 @@ export type GetRolesQueryParams = {
   page?: number;
   per_page?: number;
   q?: string;
+  owner_id?: string;
 };
 
 export type GetRolesError = Fetcher.ErrorWrapper<{

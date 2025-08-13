@@ -50,10 +50,12 @@ import {
 import {useCurrentUser} from '../../authentication';
 import {canManageGroup} from '../../authorization';
 import {minTagTime, minTagTimeGroups} from '../../helpers';
+import {Tooltip} from '@mui/material';
 
 dayjs.extend(IsSameOrBefore);
 
 interface CreateRequestButtonProps {
+  enabled: boolean;
   setOpen(open: boolean): any;
   role?: RoleGroup;
   group?: PolymorphicGroup;
@@ -63,15 +65,28 @@ interface CreateRequestButtonProps {
 
 function CreateRequestButton(props: CreateRequestButtonProps) {
   return (
-    <Button variant="contained" onClick={() => props.setOpen(true)} endIcon={<RoleRequestIcon />}>
-      {props.group == null
-        ? 'Create Request'
-        : props.renew
-          ? 'Renew'
-          : props.owner
-            ? 'Request Ownership'
-            : 'Request Membership'}
-    </Button>
+    <Tooltip
+      title={
+        props.enabled
+          ? 'Request access on behalf of a role you own.'
+          : 'You do not own any roles for which to request access.'
+      }>
+      <span>
+        <Button
+          variant="contained"
+          onClick={() => props.setOpen(true)}
+          endIcon={<RoleRequestIcon />}
+          disabled={!props.enabled}>
+          {props.group == null
+            ? 'Create Request'
+            : props.renew
+              ? 'Renew'
+              : props.owner
+                ? 'Request Ownership'
+                : 'Request Membership'}
+        </Button>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -209,11 +224,10 @@ function CreateRequestContainer(props: CreateRequestContainerProps) {
       page: 0,
       per_page: 10,
       q: roleSearchInput,
+      owner_id: '@me',
     },
   });
   let roleSearchOptions = roleSearchData?.results ?? [];
-  // Filter to only show roles owned by the current user
-  roleSearchOptions = roleSearchOptions.filter((group) => ownedGroups.includes(group.id ?? ''));
 
   const {data: groupSearchData} = useGetGroups({
     queryParams: {
@@ -491,9 +505,10 @@ function CreateRequestDialog(props: CreateRequestDialogProps) {
 }
 
 interface CreateRequestProps {
+  enabled: boolean;
   currentUser: OktaUser;
   role?: RoleGroup;
-  group?: PolymorphicGroup;
+  group?: OktaGroup | AppGroup;
   owner?: boolean;
   renew?: boolean;
 }
@@ -502,8 +517,9 @@ export default function CreateRequest(props: CreateRequestProps) {
   const [open, setOpen] = React.useState<boolean>(false);
 
   if (
+    props.role?.deleted_at != null ||
     props.group?.deleted_at != null ||
-    (props.group != null && canManageGroup(props.currentUser, props.group)) ||
+    (props.role != null && !canManageGroup(props.currentUser, props.role)) ||
     props.group?.is_managed == false
   ) {
     return null;
@@ -512,6 +528,7 @@ export default function CreateRequest(props: CreateRequestProps) {
   return (
     <>
       <CreateRequestButton
+        enabled={props.enabled}
         setOpen={setOpen}
         role={props.role}
         group={props.group}
