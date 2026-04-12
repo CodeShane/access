@@ -39,6 +39,7 @@ import ExpiringRoles from './pages/roles/Expiring';
 import Home from './pages/Home';
 import ListApps from './pages/apps/List';
 import ListGroups from './pages/groups/List';
+import ListGroupRequests from './pages/group_requests/List';
 import ListRequests from './pages/requests/List';
 import ListRoles from './pages/roles/List';
 import ListRoleRequests from './pages/role_requests/List';
@@ -48,11 +49,14 @@ import NavItems from './components/NavItems';
 import NotFound from './pages/NotFound';
 import ReadApp from './pages/apps/Read';
 import ReadGroup from './pages/groups/Read';
+import ReadGroupRequest from './pages/group_requests/Read';
 import ReadTag from './pages/tags/Read';
 import ReadUser from './pages/users/Read';
 import {useCurrentUser} from './authentication';
 import ReadRequest from './pages/requests/Read';
 import ReadRoleRequest from './pages/role_requests/Read';
+
+import {appName} from './config/accessConfig';
 
 const drawerWidth: number = 240;
 
@@ -211,8 +215,14 @@ function Dashboard({setThemeMode}: {setThemeMode: (theme: PaletteMode) => void})
               textDecoration: 'none',
             }}>
             <Avatar src="/logo-square.png" variant="square" />
-            <Typography component="h1" variant="h5" sx={{px: 2}} color="text.accent">
-              ACCESS
+            <Typography
+              title={appName}
+              component="h1"
+              variant="h5"
+              noWrap
+              sx={{px: 2, maxWidth: 125, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}
+              color="text.accent">
+              {appName.toUpperCase()}
             </Typography>
           </Link>
           <IconButton onClick={toggleDrawer}>
@@ -259,6 +269,8 @@ function Dashboard({setThemeMode}: {setThemeMode: (theme: PaletteMode) => void})
             <Route path="/tags/:id" element={<ReadTag />} />
             <Route path="/role-requests" element={<ListRoleRequests />} />
             <Route path="/role-requests/:id" element={<ReadRoleRequest />} />
+            <Route path="/group-requests" element={<ListGroupRequests />} />
+            <Route path="/group-requests/:id" element={<ReadGroupRequest />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Container>

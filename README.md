@@ -2,19 +2,19 @@
 
 # ACCESS
 
-Meet Access, a centralized portal for employees to transparently discover, request, and manage their access for all internal systems needed to do their jobs. If you're interested in the project, come chat with us!
+Meet Access, a centralized portal for employees to transparently discover, request, and manage their access to all internal systems needed to do their jobs. If you're interested in the project, come chat with us!
 
 <p align="center"><a href="https://discord.gg/access-enjoyers"><img src="https://discordapp.com/api/guilds/1232815453907189922/widget.png?style=banner2" alt="Join our Discord!"></a></p>
 
 ## Purpose
 
-The access service exists to help answer the following questions for each persona:
+The Access service exists to help answer the following questions for each persona:
 
 - All Users
   - What do I have access to?
   - What does a teammate have access to that I don’t?
   - What groups and roles are available?
-  - Can I get access?
+  - Can I request access?
 - Team Leads
   - How do I give access to a new team member easily?
   - How do I give temporary access to an individual for a cross-functional effort?
@@ -45,10 +45,10 @@ OKTA_DOMAIN=<YOUR_OKTA_DOMAIN> # For example, "mydomain.oktapreview.com"
 OKTA_API_TOKEN=<YOUR_SANDBOX_API_TOKEN>
 DATABASE_URI="sqlite:///access.db"
 CLIENT_ORIGIN_URL=http://localhost:3000
-REACT_APP_API_SERVER_URL=http://localhost:6060
+VITE_API_SERVER_URL=http://localhost:6060
 ```
 
-Next, run the following commands to set up your python virtual environment. Access can be run with Python 3.11 and above:
+Next, run the following commands to set up your python virtual environment. Access can run on Python 3.11 and above:
 
 ```
 python3 -m venv venv
@@ -56,7 +56,7 @@ python3 -m venv venv
 pip install -r requirements.txt
 ```
 
-Afterwards, seed the db:
+Afterward, seed the DB:
 
 ```
 flask db upgrade
@@ -73,7 +73,7 @@ Go to [http://localhost:6060/api/users](http://localhost:6060/api/users) to view
 
 ### Node
 
-In a separate window, setup and run nodejs:
+In a separate window, setup and run Node.js:
 
 ```
 npm install
@@ -85,9 +85,9 @@ npm start
 
 Go to [http://localhost:3000/](http://localhost:3000/) to view the React SPA.
 
-#### Generating Typescript React-Query API Client
+#### Generating Typescript React Query API Client
 
-We use [openapi-codegen](https://github.com/fabien0102/openapi-codegen) to generate a Typescript React-Query v4 API Fetch Client based on our Swagger API schema available at [http://localhost:6060/api/swagger.json](http://localhost:6060/api/swagger.json). We've modified that generated Swagger schema in [api/swagger.json](api/swagger.json), which is then used in [openapi-codegen.config.ts](openapi-codegen.config.ts) by the following commands:
+We use [openapi-codegen](https://github.com/fabien0102/openapi-codegen) to generate a Typescript React-Query v4 API Fetch Client based on our Swagger API schema available at [http://localhost:6060/api/swagger.json](http://localhost:6060/api/swagger.json). We've modified the generated Swagger schema in [api/swagger.json](api/swagger.json), which is then used in [openapi-codegen.config.ts](openapi-codegen.config.ts) by the following commands:
 
 ```
 npm install @openapi-codegen/cli
@@ -98,7 +98,7 @@ npx openapi-codegen gen api
 
 ## Tests
 
-We use tox to run our tests, which should be installed into the python venv from
+We use tox to run our tests, which should be installed into the Python venv from 
 our `requirements.txt`.
 
 Invoke the tests using `tox -e test`.
@@ -116,14 +116,14 @@ OKTA_DOMAIN=<YOUR_OKTA_DOMAIN> # For example, "mydomain.okta.com"
 OKTA_API_TOKEN=<YOUR_OKTA_API_TOKEN>
 DATABASE_URI=<YOUR_DATABASE_URI> # For example, "postgresql+pg8000://postgres:postgres@localhost:5432/access"
 CLIENT_ORIGIN_URL=http://localhost:3000
-REACT_APP_API_SERVER_URL=""
+VITE_API_SERVER_URL=""
 FLASK_SENTRY_DSN=https://<key>@sentry.io/<project>
 REACT_SENTRY_DSN=https://<key>@sentry.io/<project>
 ```
 
-### Google Cloud CloudSQL Configuration
+### Google Cloud Cloud SQL Configuration
 
-If you want to use the CloudSQL Python Connector, set the following variables in your `.env.production` file:
+If you want to use the Cloud SQL Python Connector, set the following variables in your `.env.production` file:
 
 ```
 CLOUDSQL_CONNECTION_NAME=<YOUR_CLOUDSQL_CONNECTION_NAME> # For example, "project:region:instance-name"
@@ -173,7 +173,7 @@ Create a `client_secrets.json` file containing your OIDC client secrets, that lo
 
 Then set the following variables in your `.env.production` file:
 ```
-# Generate a good secret key using `python -c 'import secrets; print(secrets.token_hex())'`
+# Generate a secure secret key using `python -c 'import secrets; print(secrets.token_hex())'`
 # this is used to encrypt Flask cookies
 SECRET_KEY=<YOUR_SECRET_KEY>
 # The path to your client_secrets.json file or if you prefer, inline the entire JSON string
@@ -192,7 +192,7 @@ using a Cloudflare Tunnel. Next, set the following variables in your `.env.produ
 CLOUDFLARE_TEAM_DOMAIN=<CLOUDFLARE_ACCESS_TEAM_DOMAIN>
 # Your Cloudflare "Audience" tag under Zero Trust -> Access -> Applications -> <Your Application> -> Overview in the Cloudflare dashboard
 # found under "Application Audience (AUD) Tag"
-CLOUDFLARE_APPLICATION_AUDIENCE=<CLOUFLARE_ACCESS_AUDIENCE_TAG>
+CLOUDFLARE_APPLICATION_AUDIENCE=<CLOUDFLARE_ACCESS_AUDIENCE_TAG>
 ```
 
 ### Docker Build and Run
@@ -232,7 +232,7 @@ The `.env.production` file is where you configure the application.
 - `OKTA_API_TOKEN`: Specifies the [Okta](https://okta.com) [API Token](https://developer.okta.com/docs/api/openapi/okta-management/management/tag/ApiToken/) to use.
 - `DATABASE_URI`: Specifies the Database connection URI. **Example:** `postgresql+pg8000://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/<DB_NAME>`.
 - `CLIENT_ORIGIN_URL`: Specifies the origin URL which is used by CORS.
-- `REACT_APP_API_SERVER_URL`: Specifies the API base URL which is used by the frontend. Set to an empty string "" to use the same URL as the frontend.
+- `VITE_API_SERVER_URL`: Specifies the API base URL which is used by the frontend. Set to an empty string "" to use the same URL as the frontend.
 - `FLASK_SENTRY_DSN`: See the [Sentry documentation](https://docs.sentry.io/product/sentry-basics/concepts/dsn-explainer/). **[OPTIONAL] You can safely remove this from your env file**
 - `REACT_SENTRY_DSN`: See the [Sentry documentation](https://docs.sentry.io/product/sentry-basics/concepts/dsn-explainer/). **[OPTIONAL] You can safely remove this from your env file**
 - `CLOUDFLARE_TEAM_DOMAIN`: Specifies the Team Domain used by [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/).
@@ -301,7 +301,7 @@ To override values on the front-end, modify these key-value pairs inside the `FR
 | `NAME_VALIDATION_PATTERN` | Specifies the regex pattern to use for validating role, group, and tag names.  Should include preceding `^` and trailing `$` but is not a regex literal so omit `/`  at beginning and end of the pattern | `"^[a-zA-Z0-9-]*$"`                                            |
 | `NAME_VALIDATION_ERROR`   | Specifies the error message to display when a name does not match the validation pattern.                                                                                                                | `"Name must contain only letters, numbers, and underscores."`  |
 
-The front-end config is loaded in [`craco.config.js`](craco.config.js). See
+The front-end config is loaded in [`vite.config.ts`](vite.config.ts). See
 [`src/config/loadAccessConfig.js`](src/config/loadAccessConfig.js) for more details.
 
 #### Backend Configuration

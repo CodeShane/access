@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, validates
 from sqlalchemy.sql import expression
 from sqlalchemy_json import mutable_json_type
 
+from api import config
 from api.extensions import db
 
 
@@ -220,9 +221,17 @@ class OktaUser(db.Model):
         innerjoin=True,
     )
 
-    all_resolved_role_requests: Mapped[List["AccessRequest"]] = db.relationship(
+    all_resolved_role_requests: Mapped[List["RoleRequest"]] = db.relationship(
         "RoleRequest",
         primaryjoin="OktaUser.id == RoleRequest.resolver_user_id",
+        back_populates="resolver",
+        lazy="raise_on_sql",
+        innerjoin=True,
+    )
+
+    all_resolved_group_requests: Mapped[List["GroupRequest"]] = db.relationship(
+        "GroupRequest",
+        primaryjoin="OktaUser.id == GroupRequest.resolver_user_id",
         back_populates="resolver",
         lazy="raise_on_sql",
         innerjoin=True,
@@ -275,7 +284,7 @@ class OktaGroup(db.Model):
         server_default="{}",
     )
 
-    # A JSON field for Group plugin integrations in the form of {"unique_plugin_name":{plugin_data},}
+    # A JSON field for Group plugin integrations in the form of {"unique_plugin_name": plugin_data}
     # https://github.com/edelooff/sqlalchemy-json
     # https://amercader.net/blog/beware-of-json-fields-in-sqlalchemy/
     plugin_data: Mapped[Dict[str, Any]] = mapped_column(
@@ -411,6 +420,13 @@ class OktaGroup(db.Model):
         viewonly=True,
         lazy="raise_on_sql",
         innerjoin=True,
+    )
+
+    group_request: Mapped["GroupRequest"] = db.relationship(
+        "GroupRequest",
+        back_populates="approved_group",
+        lazy="raise_on_sql",
+        uselist=False,
     )
 
     all_group_tags: Mapped[List["OktaGroupTagMap"]] = db.relationship(
@@ -625,7 +641,7 @@ class AppGroup(OktaGroup):
 
 
 class App(db.Model):
-    ACCESS_APP_RESERVED_NAME = "Access"
+    ACCESS_APP_RESERVED_NAME = config.APP_NAME
 
     # A 20 character random string like Okta IDs
     id: Mapped[str] = mapped_column(db.Unicode(20), primary_key=True, nullable=False)
@@ -637,6 +653,18 @@ class App(db.Model):
 
     name: Mapped[str] = mapped_column(db.Unicode(255), nullable=False)
     description: Mapped[str] = mapped_column(db.Unicode(1024), nullable=False, default="")
+
+    # Optional plugin ID for managing app group lifecycle
+    app_group_lifecycle_plugin: Mapped[Optional[str]] = mapped_column(db.Unicode(255))
+
+    # A JSON field for App plugin integrations in the form of {"unique_plugin_name": plugin_data }
+    # https://github.com/edelooff/sqlalchemy-json
+    # https://amercader.net/blog/beware-of-json-fields-in-sqlalchemy/
+    plugin_data: Mapped[Dict[str, Any]] = mapped_column(
+        mutable_json_type(dbtype=db.JSON().with_variant(JSONB, "postgresql"), nested=True),
+        nullable=False,
+        server_default="{}",
+    )
 
     app_groups: Mapped[List[AppGroup]] = db.relationship("AppGroup", back_populates="app", lazy="raise_on_sql")
 
@@ -876,6 +904,109 @@ class RoleRequest(db.Model):
         back_populates="role_request",
         foreign_keys=[approved_membership_id],
         lazy="raise_on_sql",
+    )
+
+
+class GroupRequest(db.Model):
+    # A 20 character random string like Okta IDs
+    id: Mapped[str] = mapped_column(db.Unicode(20), primary_key=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(db.DateTime(), nullable=False, default=db.func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        db.DateTime(), nullable=False, default=db.func.now(), onupdate=db.func.now()
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(db.DateTime())
+
+    status: Mapped[AccessRequestStatus] = mapped_column(
+        db.Enum(AccessRequestStatus),
+        nullable=False,
+        default=AccessRequestStatus.PENDING,
+    )
+
+    # For now, the requester will be set as the owner of the group, may expand in the future to allow the
+    # requester to set other users or roles as proposed owners
+    requester_user_id: Mapped[str] = mapped_column(db.Unicode(50), db.ForeignKey("okta_user.id"))
+    # https://developer.okta.com/docs/reference/api/groups/#default-profile-properties
+    requested_group_name: Mapped[str] = mapped_column(db.Unicode(255), nullable=False)
+    requested_group_description: Mapped[str] = mapped_column(db.Unicode(1024), nullable=False, default="")
+    requested_group_type: Mapped[str] = mapped_column(db.Unicode(50), nullable=False)
+    requested_app_id: Mapped[Optional[str]] = mapped_column(db.Unicode(20), db.ForeignKey("app.id"))
+    requested_ownership_ending_at: Mapped[Optional[datetime]] = mapped_column(db.DateTime())
+    # Tag ids
+    requested_group_tags: Mapped[List[str]] = mapped_column(
+        mutable_json_type(
+            dbtype=db.JSON().with_variant(JSONB, "postgresql"),
+            nested=True,
+        ),
+        nullable=False,
+        server_default="[]",
+    )
+    # Will also be used to populate owner access reason field
+    request_reason: Mapped[str] = mapped_column(db.Unicode(1024), nullable=False, default="")
+
+    # Since resolver can edit all fields before group is created, have 'resolved' version
+    resolver_user_id: Mapped[Optional[str]] = mapped_column(db.Unicode(50), db.ForeignKey("okta_user.id"))
+    # https://developer.okta.com/docs/reference/api/groups/#default-profile-properties
+    resolved_group_name: Mapped[str] = mapped_column(db.Unicode(255), nullable=False, default="")
+    resolved_group_description: Mapped[str] = mapped_column(db.Unicode(1024), nullable=False, default="")
+    resolved_group_type: Mapped[str] = mapped_column(db.Unicode(50), nullable=False, default="")
+    resolved_app_id: Mapped[Optional[str]] = mapped_column(db.Unicode(20), db.ForeignKey("app.id"))
+    resolved_ownership_ending_at: Mapped[Optional[datetime]] = mapped_column(db.DateTime())
+    # Tag ids
+    resolved_group_tags: Mapped[List[str]] = mapped_column(
+        mutable_json_type(
+            dbtype=db.JSON().with_variant(JSONB, "postgresql"),
+            nested=True,
+        ),
+        nullable=False,
+        server_default="[]",
+    )
+    resolution_reason: Mapped[str] = mapped_column(db.Unicode(1024), nullable=False, default="")
+
+    approved_group_id: Mapped[Optional[str]] = mapped_column(
+        db.Unicode(50),
+        db.ForeignKey("okta_group.id"),
+    )
+
+    requester: Mapped[OktaUser] = db.relationship(
+        "OktaUser",
+        primaryjoin="OktaUser.id == GroupRequest.requester_user_id",
+        viewonly=True,
+        lazy="raise_on_sql",
+        innerjoin=True,
+    )
+
+    active_requester: Mapped[OktaUser] = db.relationship(
+        "OktaUser",
+        primaryjoin="and_(OktaUser.id == GroupRequest.requester_user_id, " "OktaUser.deleted_at.is_(None))",
+        viewonly=True,
+        lazy="raise_on_sql",
+        innerjoin=True,
+    )
+
+    resolver: Mapped[OktaUser] = db.relationship(
+        "OktaUser",
+        back_populates="all_resolved_group_requests",
+        foreign_keys=[resolver_user_id],
+        lazy="raise_on_sql",
+    )
+
+    active_resolver: Mapped[OktaUser] = db.relationship(
+        "OktaUser",
+        primaryjoin="and_(OktaUser.id == GroupRequest.resolver_user_id, " "OktaUser.deleted_at.is_(None))",
+        viewonly=True,
+        lazy="raise_on_sql",
+    )
+
+    approved_group: Mapped[OktaGroup] = db.relationship(
+        "OktaGroup",
+        back_populates="group_request",
+        foreign_keys=[approved_group_id],
+        lazy="raise_on_sql",
+    )
+
+    requested_app: Mapped[Optional["App"]] = db.relationship(
+        "App",
+        foreign_keys=[requested_app_id],
     )
 
 

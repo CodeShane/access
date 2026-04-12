@@ -1,10 +1,11 @@
-from typing import AbstractSet, Any, Dict, List, Optional, Sequence, cast
+from typing import AbstractSet, Any, Dict, List, Mapping, Optional, Sequence, cast
 
 from flask import current_app
 from marshmallow import Schema, ValidationError, fields, utils, validate, validates_schema
 from marshmallow.schema import SchemaMeta, SchemaOpts
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema, auto_field
 from sqlalchemy.orm import Session
+
 from api.access_config import get_access_config
 from api.extensions import db
 from api.models import (
@@ -12,6 +13,7 @@ from api.models import (
     App,
     AppGroup,
     AppTagMap,
+    GroupRequest,
     OktaGroup,
     OktaGroupTagMap,
     OktaUser,
@@ -21,8 +23,58 @@ from api.models import (
     RoleRequest,
     Tag,
 )
+from api.plugins.app_group_lifecycle import (
+    validate_app_group_lifecycle_plugin_app_config,
+    validate_app_group_lifecycle_plugin_group_config,
+)
 
 access_config = get_access_config()
+
+
+def context_aware_description_field() -> fields.Field:
+    """
+    Returns a context-aware description field that reads REQUIRE_DESCRIPTIONS
+    from Flask app config at validation time instead of module import time.
+
+    This allows tests to parametrize the REQUIRE_DESCRIPTIONS setting without
+    needing separate test environments or module reloading.
+    """
+
+    class ContextAwareDescriptionField(fields.String):
+        def deserialize(
+            self, value: Any, attr: Optional[str] = None, data: Optional[Mapping[str, Any]] = None, **kwargs: Any
+        ) -> Any:
+            # Read config at deserialization time (when processing request data)
+            require_descriptions = current_app.config.get("REQUIRE_DESCRIPTIONS", False)
+
+            # Check if field was provided in the input data
+            field_was_provided = data is not None and attr is not None and attr in data
+
+            # If field wasn't provided and descriptions are required, raise error
+            if not field_was_provided and require_descriptions:
+                raise ValidationError("Description is required.")
+
+            # If field wasn't provided and descriptions are not required, return empty string
+            if not field_was_provided:
+                return ""
+
+            # Field was provided, validate it
+            if value == "" and require_descriptions:
+                raise ValidationError("Description must be between 1 and 1024 characters")
+
+            # Use parent deserialization for type conversion
+            if value is None or value == "":
+                return "" if not require_descriptions else self.fail("required")
+
+            result = super().deserialize(value, attr, data, **kwargs)
+
+            # Validate length
+            if result and len(result) > 1024:
+                raise ValidationError("Description must be 1024 characters or less")
+
+            return result
+
+    return ContextAwareDescriptionField(allow_none=True, load_default="", dump_default="")
 
 
 # See https://stackoverflow.com/a/58646612
@@ -255,7 +307,7 @@ class OktaGroupSchema(SQLAlchemyAutoSchema):
             ),
         ),
     )
-    description = auto_field(load_default="", validate=validate.Length(max=1024))
+    description = context_aware_description_field()
 
     externally_managed_data = fields.Dict()
 
@@ -628,7 +680,7 @@ class RoleGroupSchema(SQLAlchemyAutoSchema):
             ),
         ),
     )
-    description = auto_field(load_default="", validate=validate.Length(max=1024))
+    description = context_aware_description_field()
 
     externally_managed_data = fields.Dict()
 
@@ -847,9 +899,10 @@ class AppGroupSchema(SQLAlchemyAutoSchema):
             ),
         ),
     )
-    description = auto_field(load_default="", validate=validate.Length(max=1024))
+    description = context_aware_description_field()
 
     externally_managed_data = fields.Dict()
+    plugin_data = fields.Dict()
 
     @validates_schema
     def validate_app_group(self, data: Dict[str, Any], **kwargs: Any) -> None:
@@ -865,8 +918,38 @@ class AppGroupSchema(SQLAlchemyAutoSchema):
                 )
             )
 
+    @validates_schema
+    def validate_plugin_data(self, data: Dict[str, Any], **kwargs: Any) -> None:
+        # Only validate plugin_data if it's present in the data
+        plugin_data = data.get("plugin_data")
+        if plugin_data is None:
+            return
+
+        # Check if plugin_data contains data for individual plugins
+        if not isinstance(plugin_data, dict):
+            raise ValidationError(
+                "Plugin data must be a dictionary, mapping plugin IDs to plugin-specific data", field_name="plugin_data"
+            )
+
+        # Get the app to check if it has a plugin configured
+        app = None
+        if "app_id" in data:
+            app = App.query.filter(App.id == data["app_id"]).filter(App.deleted_at.is_(None)).first()
+
+        # Validate the app group lifecycle plugin configuration, if present
+        if app and app.app_group_lifecycle_plugin is not None:
+            error_message = (
+                f"Configuration validation for app group lifecycle plugin '{app.app_group_lifecycle_plugin}' failed"
+            )
+            try:
+                errors = validate_app_group_lifecycle_plugin_group_config(plugin_data, app.app_group_lifecycle_plugin)
+            except ValueError as e:
+                raise ValidationError(f"{error_message}: {e}", field_name="plugin_data") from e
+            if errors:
+                raise ValidationError(f"{error_message}: {errors}", field_name="plugin_data")
+
     app_id = auto_field(required=True, validate=validate.Length(equal=20))
-    app = fields.Nested(lambda: AppSchema(only=("id", "name", "deleted_at")))
+    app = fields.Nested(lambda: AppSchema(only=("id", "name", "deleted_at", "app_group_lifecycle_plugin")))
 
     tags_to_add = fields.List(fields.String(validate=validate.Length(equal=20)), load_only=True)
     tags_to_remove = fields.List(fields.String(validate=validate.Length(equal=20)), load_only=True)
@@ -1078,6 +1161,7 @@ class AppGroupSchema(SQLAlchemyAutoSchema):
             "description",
             "is_managed",
             "externally_managed_data",
+            "plugin_data",
             "is_owner",
             "app",
             "app_id",
@@ -1138,7 +1222,7 @@ class InitialAppGroupSchema(Schema):
             ),
         ),
     )
-    description = fields.String(load_default="", validate=validate.Length(max=1024))
+    description = context_aware_description_field()
 
 
 class AppSchema(SQLAlchemyAutoSchema):
@@ -1152,7 +1236,59 @@ class AppSchema(SQLAlchemyAutoSchema):
             ),
         ),
     )
-    description = auto_field(validate=validate.Length(max=1024))
+    description = context_aware_description_field()
+
+    app_group_lifecycle_plugin = auto_field(validate=validate.Length(max=255), allow_none=True)
+    plugin_data = fields.Dict()
+
+    @validates_schema
+    def validate_app_group_lifecycle_plugin(self, data: Dict[str, Any], **kwargs: Any) -> None:
+        # Only validate if app_group_lifecycle_plugin is present and not None
+        plugin_id = data.get("app_group_lifecycle_plugin")
+        if plugin_id is None:
+            return
+
+        # Basic validation: ensure it's a non-empty string
+        if not isinstance(plugin_id, str) or not plugin_id.strip():
+            raise ValidationError(
+                "App group lifecycle plugin ID must be a non-empty string", field_name="app_group_lifecycle_plugin"
+            )
+
+        # Validate that plugin_id corresponds to a registered app group lifecycle plugin
+        from api.plugins.app_group_lifecycle import get_app_group_lifecycle_plugins
+
+        registered_plugins = [plugin.id for plugin in get_app_group_lifecycle_plugins()]
+        if plugin_id not in registered_plugins:
+            raise ValidationError(
+                f"Invalid app group lifecycle plugin ID: '{plugin_id}' is not a registered plugin. Available plugins: {', '.join(registered_plugins)}",
+                field_name="app_group_lifecycle_plugin",
+            )
+
+    @validates_schema
+    def validate_plugin_data(self, data: Dict[str, Any], **kwargs: Any) -> None:
+        # Only validate plugin_data if it's present in the data
+        plugin_data = data.get("plugin_data")
+        if plugin_data is None:
+            return
+
+        # Check if plugin_data is a dictionary
+        if not isinstance(plugin_data, dict):
+            raise ValidationError(
+                "Plugin data must be a dictionary, mapping plugin IDs to plugin-specific data", field_name="plugin_data"
+            )
+
+        # Validate app group lifecycle plugin configuration, if present
+        app_group_lifecycle_plugin = data.get("app_group_lifecycle_plugin")
+        if app_group_lifecycle_plugin is not None:
+            error_message = (
+                f"Configuration validation for app group lifecycle plugin '{app_group_lifecycle_plugin}' failed"
+            )
+            try:
+                errors = validate_app_group_lifecycle_plugin_app_config(plugin_data, app_group_lifecycle_plugin)
+            except ValueError as e:
+                raise ValidationError(f"{error_message}: {e}", field_name="plugin_data") from e
+            if errors:
+                raise ValidationError(f"{error_message}: {errors}", field_name="plugin_data")
 
     initial_owner_id = fields.String(validate=validate.Length(min=1, max=255), load_only=True)
     initial_owner_role_ids = fields.List(fields.String(validate=validate.Length(equal=20)), load_only=True)
@@ -1201,6 +1337,8 @@ class AppSchema(SQLAlchemyAutoSchema):
             "deleted_at",
             "name",
             "description",
+            "app_group_lifecycle_plugin",
+            "plugin_data",
             "initial_owner_id",
             "initial_owner_role_ids",
             "initial_additional_app_groups",
@@ -1282,7 +1420,7 @@ class PolymorphicGroupSchema(Schema, metaclass=PolymorphicGroupSchemaMeta):
                 exclude=self._polymorphic_fields_intersection(group_class, self.exclude),
                 load_only=self._polymorphic_fields_intersection(group_class, self.load_only),
                 dump_only=self._polymorphic_fields_intersection(group_class, self.dump_only),
-            ).load(data, session=session, instance=instance, transient=transient)
+            ).load(data, session=session, instance=instance, transient=transient, **kwargs)
         else:
             raise ValidationError(f"Unexpected group type, expecting one of {self.TYPE_TO_GROUP_SCHEMA_MAP.keys()}")
         raise ValidationError(f"Unable to validate with: {self.TYPE_TO_GROUP_SCHEMA_MAP}")
@@ -1455,6 +1593,72 @@ class RoleRequestSchema(SQLAlchemyAutoSchema):
         )
 
 
+class GroupRequestSchema(SQLAlchemyAutoSchema):
+    requester = fields.Nested(lambda: OktaUserSchema)
+    active_requester = fields.Nested(lambda: OktaUserSchema)
+    resolver = fields.Nested(lambda: OktaUserSchema)
+    active_resolver = fields.Nested(lambda: OktaUserSchema)
+    approved_group = fields.Nested(lambda: PolymorphicGroupSchema)
+
+    class Meta:
+        model = GroupRequest
+        sqla_session = db.session
+        load_instance = True
+        include_relationships = True
+        fields = (
+            "id",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+            "status",
+            "requester",
+            "active_requester",
+            "requested_group_name",
+            "requested_group_description",
+            "requested_group_type",
+            "requested_app_id",
+            "requested_group_tags",
+            "requested_ownership_ending_at",
+            "request_reason",
+            "resolver",
+            "active_resolver",
+            "resolved_group_name",
+            "resolved_group_description",
+            "resolved_group_type",
+            "resolved_app_id",
+            "resolved_group_tags",
+            "resolved_ownership_ending_at",
+            "resolution_reason",
+            "approved_group",
+        )
+        dump_only = (
+            "id",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+            "status",
+            "requester",
+            "active_requester",
+            "requested_group_name",
+            "requested_group_description",
+            "requested_group_type",
+            "requested_app_id",
+            "requested_group_tags",
+            "requested_ownership_ending_at",
+            "request_reason",
+            "resolver",
+            "active_resolver",
+            "resolved_group_name",
+            "resolved_group_description",
+            "resolved_group_type",
+            "resolved_app_id",
+            "resolved_group_tags",
+            "resolved_ownership_ending_at",
+            "resolution_reason",
+            "approved_group",
+        )
+
+
 class TagSchema(SQLAlchemyAutoSchema):
     name = auto_field(
         required=True,
@@ -1466,7 +1670,7 @@ class TagSchema(SQLAlchemyAutoSchema):
             ),
         ),
     )
-    description = auto_field(load_default="", validate=validate.Length(max=1024))
+    description = context_aware_description_field()
 
     def validate_constraints(value) -> bool:
         if not isinstance(value, dict):
@@ -1678,3 +1882,25 @@ class AppTagMapSchema(SQLAlchemyAutoSchema):
             "group_tag_mapping",
             "active_group_tag_mappings",
         )
+
+
+# Plugin-related schemas
+class AppGroupLifecyclePluginMetadataSchema(Schema):
+    id = fields.String(required=True)
+    display_name = fields.String(required=True)
+    description = fields.String(required=False, allow_none=True)
+
+
+class AppGroupLifecyclePluginConfigPropertySchema(Schema):
+    display_name = fields.String(required=True)
+    help_text = fields.String(required=False, allow_none=True)
+    type = fields.String(required=True, validate=validate.OneOf(["text", "number", "boolean"]))
+    default_value = fields.Raw(required=False, allow_none=True)
+    required = fields.Boolean(required=False, load_default=False)
+    validation = fields.Dict(required=False, allow_none=True)
+
+
+class AppGroupLifecyclePluginStatusPropertySchema(Schema):
+    display_name = fields.String(required=True)
+    help_text = fields.String(required=False, allow_none=True)
+    type = fields.String(required=True, validate=validate.OneOf(["text", "number", "date", "boolean"]))

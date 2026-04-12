@@ -27,7 +27,9 @@ from api.views import (
     bugs_views,
     exception_views,
     groups_views,
+    group_requests_views,
     health_check_views,
+    plugins_views,
     role_requests_views,
     roles_views,
     tags_views,
@@ -202,6 +204,7 @@ def create_app(testing: Optional[bool] = False) -> Flask:
     app.cli.add_command(manage.fix_unmanaged_groups)
     app.cli.add_command(manage.fix_role_memberships)
     app.cli.add_command(manage.notify)
+    app.cli.add_command(manage.sync_app_group_memberships)
 
     # Register dynamically loaded commands
     flask_commands = entry_points(group="flask.commands")
@@ -217,6 +220,19 @@ def create_app(testing: Optional[bool] = False) -> Flask:
     # Configure APISpec for swagger support
     ###########################################
     docs.init_app(app)
+
+    ##########################################
+    # Validate plugins
+    ##########################################
+    # Validate app group lifecycle plugins at startup to ensure uniqueness
+    # and proper registration
+    try:
+        from api.plugins.app_group_lifecycle import get_app_group_lifecycle_plugins
+
+        _ = get_app_group_lifecycle_plugins()
+    except Exception:
+        logger.exception("Failed to validate app group lifecycle plugins.")
+        raise
 
     ##########################################
     # Blueprint Registration
@@ -245,9 +261,13 @@ def create_app(testing: Optional[bool] = False) -> Flask:
     roles_views.register_docs()
     app.register_blueprint(role_requests_views.bp)
     role_requests_views.register_docs()
+    app.register_blueprint(group_requests_views.bp)
+    group_requests_views.register_docs()
     app.register_blueprint(tags_views.bp)
     tags_views.register_docs()
     app.register_blueprint(webhook_views.bp)
     app.register_blueprint(bugs_views.bp)
+    app.register_blueprint(plugins_views.bp)
+    plugins_views.register_docs()
 
     return app

@@ -40,6 +40,7 @@ import RemoveOwnDirectAccessDialog, {RemoveOwnDirectAccessDialogParameters} from
 import NotFound from '../NotFound';
 import Loading from '../../components/Loading';
 import Ending from '../../components/Ending';
+import MarkdownDescription from '../../components/MarkdownDescription';
 import {groupBy, displayGroupType, displayUserName} from '../../helpers';
 import {useGetAppById, useGetGroupById, usePutGroupMembersById} from '../../api/apiComponents';
 import {
@@ -57,6 +58,7 @@ import {Diversity3 as RoleIcon} from '@mui/icons-material';
 import AppLinkButton from './AppLinkButton';
 import AvatarButton from '../../components/AvatarButton';
 import MembershipChip from '../../components/MembershipChip';
+import AppGroupLifecyclePluginData from '../../components/AppGroupLifecyclePluginData';
 
 function sortGroupMembers(
   [aUserId, aUsers]: [string, Array<OktaUserGroupMember>],
@@ -241,9 +243,7 @@ export default function ReadGroup() {
                         group.name
                       )}
                     </Typography>
-                    <Typography variant="h5" align="center">
-                      {group.description}
-                    </Typography>
+                    <MarkdownDescription description={group.description} />
                     <Box>
                       {group.active_group_tags?.map((tagMap) => (
                         <Chip
@@ -294,6 +294,24 @@ export default function ReadGroup() {
               </Stack>
             </Paper>
           </Grid>
+          {group.type === 'app_group' && (app as any)?.app_group_lifecycle_plugin && (
+            <Grid item xs={12}>
+              <AppGroupLifecyclePluginData
+                entityType="group"
+                pluginId={(app as any).app_group_lifecycle_plugin}
+                currentConfig={
+                  (group as any)?.plugin_data
+                    ? (group as any).plugin_data[(app as any).app_group_lifecycle_plugin]?.configuration || {}
+                    : {}
+                }
+                currentStatus={
+                  (group as any)?.plugin_data
+                    ? (group as any).plugin_data[(app as any).app_group_lifecycle_plugin]?.status || {}
+                    : {}
+                }
+              />
+            </Grid>
+          )}
           {group.type == 'role_group' ? (
             <>
               <Grid item xs={6}>

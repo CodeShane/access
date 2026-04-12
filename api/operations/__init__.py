@@ -1,6 +1,9 @@
 from api.operations.approve_access_request import ApproveAccessRequest
 from api.operations.create_access_request import CreateAccessRequest
 from api.operations.reject_access_request import RejectAccessRequest
+from api.operations.approve_group_request import ApproveGroupRequest
+from api.operations.create_group_request import CreateGroupRequest
+from api.operations.reject_group_request import RejectGroupRequest
 from api.operations.approve_role_request import ApproveRoleRequest
 from api.operations.create_role_request import CreateRoleRequest
 from api.operations.reject_role_request import RejectRoleRequest
@@ -14,6 +17,7 @@ from api.operations.delete_user import DeleteUser
 from api.operations.modify_groups_time_limit import ModifyGroupsTimeLimit
 from api.operations.modify_app_tags import ModifyAppTags
 from api.operations.modify_group_tags import ModifyGroupTags
+from api.operations.modify_group_details import ModifyGroupDetails
 from api.operations.modify_group_type import ModifyGroupType
 from api.operations.modify_group_users import ModifyGroupUsers
 from api.operations.modify_role_groups import ModifyRoleGroups
@@ -23,6 +27,9 @@ __all__ = [
     "CreateAccessRequest",
     "ApproveAccessRequest",
     "RejectAccessRequest",
+    "CreateGroupRequest",
+    "ApproveGroupRequest",
+    "RejectGroupRequest",
     "CreateRoleRequest",
     "ApproveRoleRequest",
     "RejectRoleRequest",
@@ -31,6 +38,7 @@ __all__ = [
     "DeleteApp",
     "CreateGroup",
     "ModifyAppTags",
+    "ModifyGroupDetails",
     "ModifyGroupTags",
     "ModifyGroupType",
     "ModifyGroupUsers",

@@ -31,7 +31,8 @@ import {
 } from '../../api/apiComponents';
 import {PolymorphicGroup, AppGroup, App, OktaUser, Tag, OktaGroupTagMap} from '../../api/apiSchemas';
 import {canManageGroup, isAccessAdmin, isAppOwnerGroupOwner} from '../../authorization';
-import accessConfig from '../../config/accessConfig';
+import accessConfig, {requireDescriptions} from '../../config/accessConfig';
+import AppGroupLifecyclePluginConfigurationForm from '../../components/AppGroupLifecyclePluginConfigurationForm';
 
 interface GroupButtonProps {
   defaultGroupType: 'okta_group' | 'app_group' | 'role_group';
@@ -98,6 +99,16 @@ function GroupDialog(props: GroupDialogProps) {
   const [requestError, setRequestError] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
 
+  const appGroupLifecyclePluginId = React.useMemo(() => {
+    if (groupType !== 'app_group') return null;
+    const app = props.app ?? (props.group as AppGroup)?.app;
+    return (app as any)?.app_group_lifecycle_plugin || null;
+  }, [groupType, props.app, props.group]);
+
+  const isAllowedToConfigureAppGroupLifecyclePlugin =
+    isAccessAdmin(props.currentUser) ||
+    isAppOwnerGroupOwner(props.currentUser, props.app?.id ?? (props.group as AppGroup)?.app?.id ?? '');
+
   const complete = (
     completedGroup: PolymorphicGroup | undefined,
     error: CreateGroupError | PutGroupByIdError | null,
@@ -163,7 +174,7 @@ function GroupDialog(props: GroupDialogProps) {
       case 'app_group':
         const appGroup = group as AppGroup;
         appGroup.app_id = appGroup.app?.id ?? '';
-        appGroup.name = (APP_GROUP_PREFIX + appGroup.app?.name ?? '') + APP_NAME_APP_GROUP_SEPARATOR + appGroup.name;
+        appGroup.name = APP_GROUP_PREFIX + (appGroup.app?.name ?? '') + APP_NAME_APP_GROUP_SEPARATOR + appGroup.name;
         break;
     }
     delete (group as AppGroup).app;
@@ -296,10 +307,11 @@ function GroupDialog(props: GroupDialogProps) {
                   return error?.message ?? '';
                 }
                 if (error.type == 'maxLength') {
-                  return 'Name can be at most 1024 characters in length';
+                  return 'Description can be at most 1024 characters in length';
                 }
                 return '';
               }}
+              required={requireDescriptions}
             />
           </FormControl>
           <FormControl margin="normal" fullWidth>
@@ -321,6 +333,17 @@ function GroupDialog(props: GroupDialogProps) {
               renderInput={(params) => <TextField {...params} label="Tags" placeholder="Tags" />}
             />
           </FormControl>
+          {appGroupLifecyclePluginId && isAllowedToConfigureAppGroupLifecyclePlugin && (
+            <AppGroupLifecyclePluginConfigurationForm
+              entityType="group"
+              selectedPluginId={appGroupLifecyclePluginId}
+              currentConfig={
+                appGroupLifecyclePluginId && (props.group as any)?.plugin_data
+                  ? (props.group as any).plugin_data[appGroupLifecyclePluginId]?.configuration || {}
+                  : {}
+              }
+            />
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => props.setOpen(false)}>Cancel</Button>

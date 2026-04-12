@@ -1,3 +1,5 @@
+import copy
+
 from flask import abort, current_app, g, redirect, request, url_for
 from flask.typing import ResponseReturnValue
 from flask_apispec import MethodResource
@@ -16,13 +18,14 @@ from api.models import AppGroup, OktaGroup, OktaGroupTagMap, OktaUser, OktaUserG
 from api.operations import (
     CreateGroup,
     DeleteGroup,
+    ModifyGroupDetails,
     ModifyGroupTags,
     ModifyGroupType,
     ModifyGroupUsers,
 )
 from api.operations.constraints import CheckForReason, CheckForSelfAdd
 from api.pagination import paginate
-from api.services import okta
+from api.plugins.app_group_lifecycle import merge_app_lifecycle_plugin_data
 from api.views.schemas import (
     AuditLogSchema,
     DeleteMessageSchema,
@@ -108,13 +111,23 @@ class GroupResource(MethodResource):
     @FlaskApiSpecDecorators.response_schema(PolymorphicGroupSchema)
     def put(self, group: OktaGroup) -> ResponseReturnValue:
         schema = PolymorphicGroupSchema(exclude=DEFAULT_SCHEMA_DISPLAY_EXCLUSIONS)
-        group_changes = schema.load(request.json)
-        old_group_name = group.name
+        group_changes = schema.load(request.json, partial=True)
 
         if not group.is_managed:
             abort(
                 400,
                 "Groups not managed by Access cannot be modified",
+            )
+
+        # Enforce stricter authorization for plugin configuration changes to prevent
+        # privilege escalation in the managed apps.
+        if (group_changes.plugin_data or {}) != group.plugin_data and not (
+            AuthorizationHelpers.is_access_admin()
+            or (type(group) is AppGroup and AuthorizationHelpers.is_app_owner_group_owner(app_group=group))
+        ):
+            abort(
+                403,
+                "Only Access owners and app owners are allowed to configure plugins at the group level",
             )
 
         json_data = request.get_json()
@@ -148,16 +161,17 @@ class GroupResource(MethodResource):
                     "Only tags can be modifed for application owner groups",
                 )
 
-        # Do not allow non-deleted groups with the same name (case-insensitive)
-        if group.name.lower() != group_changes.name.lower():
-            existing_group = (
-                db.session.query(with_polymorphic(OktaGroup, [AppGroup, RoleGroup]))
-                .filter(func.lower(OktaGroup.name) == func.lower(group_changes.name))
-                .filter(OktaGroup.deleted_at.is_(None))
-                .first()
-            )
-            if existing_group is not None:
-                abort(400, "Group already exists with the same name")
+        # Update name and description, sync to Okta, and fire group_updated hook.
+        # This runs before ModifyGroupType so the group_created hook (fired inside
+        # ModifyGroupType) sees the final name/description.
+        try:
+            ModifyGroupDetails(
+                group=group,
+                name=group_changes.name if "name" in json_data else None,
+                description=group_changes.description if "description" in json_data else None,
+            ).execute()
+        except ValueError as e:
+            abort(400, str(e))
 
         # Update group type if it's being modified
         if type(group) is not type(group_changes):
@@ -171,9 +185,22 @@ class GroupResource(MethodResource):
                 group=group, group_changes=group_changes, current_user_id=g.current_user_id
             ).execute()
 
-        # Update additional fields like name, description, etc.
-        group = schema.load(request.json, instance=group)
-        okta.update_group(group.id, group.name, group.description)
+        # Store old plugin data for audit logging (must be deep copy to preserve original values)
+        old_plugin_data_for_audit = copy.deepcopy(group.plugin_data) if group.plugin_data else {}
+        old_plugin_data = group.plugin_data
+
+        # Update additional fields like plugin_data (name/description already handled above)
+        group = schema.load(request.json, instance=group, partial=True)
+
+        if old_plugin_data and group.plugin_data != old_plugin_data:
+            # Apply partial updates to the plugin data
+            for key in old_plugin_data:
+                if key not in group.plugin_data:
+                    group.plugin_data[key] = old_plugin_data[key]
+
+            if type(group) is AppGroup:
+                merge_app_lifecycle_plugin_data(group, old_plugin_data)
+
         db.session.commit()
 
         ModifyGroupTags(
@@ -191,12 +218,12 @@ class GroupResource(MethodResource):
             .first()
         )
 
-        # Audit logging gnly log if group name changed
-        if old_group_name.lower() != group.name.lower():
+        # Audit logging for plugin configuration changes (app groups only)
+        if old_plugin_data_for_audit != group.plugin_data:
             current_app.logger.info(
                 AuditLogSchema().dumps(
                     {
-                        "event_type": EventType.group_modify_name,
+                        "event_type": EventType.group_modify_plugin,
                         "user_agent": request.headers.get("User-Agent"),
                         "ip": request.headers.get(
                             "X-Forwarded-For", request.headers.get("X-Real-IP", request.remote_addr)
@@ -204,7 +231,7 @@ class GroupResource(MethodResource):
                         "current_user_id": g.current_user_id,
                         "current_user_email": getattr(db.session.get(OktaUser, g.current_user_id), "email", None),
                         "group": group,
-                        "old_group_name": old_group_name,
+                        "old_plugin_data": old_plugin_data_for_audit,
                     }
                 )
             )
@@ -300,10 +327,15 @@ class GroupMemberResource(MethodResource):
 
         # Check if the current user can manage this group
         if not AuthorizationHelpers.can_manage_group(group):
-            if len(user_changes["members_to_add"]) > 0 or len(user_changes["owners_to_add"]) > 0:
+            if (
+                len(user_changes["members_to_add"]) > 0
+                or len(user_changes["owners_to_add"]) > 0
+                or len(user_changes.get("members_should_expire", [])) > 0
+                or len(user_changes.get("owners_should_expire", [])) > 0
+            ):
                 abort(
                     403,
-                    "Current user is not allowed to add members to this group",
+                    "Current user is not allowed to modify user access to this group",
                 )
             if len(user_changes["members_to_remove"]) > 0 or len(user_changes["owners_to_remove"]) > 0:
                 for user_id in user_changes["members_to_remove"] + user_changes["owners_to_remove"]:

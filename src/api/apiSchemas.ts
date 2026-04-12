@@ -104,6 +104,8 @@ export type App = {
    * @format date-time
    */
   updated_at?: string;
+  app_group_lifecycle_plugin?: string | null;
+  plugin_data?: Record<string, any>;
 };
 
 export type AppGroup = OktaGroup & {
@@ -129,6 +131,7 @@ export type AppGroup = OktaGroup & {
   description?: string;
   tags_to_add?: string[];
   tags_to_remove?: string[];
+  plugin_data?: Record<string, any>;
 };
 
 export type AppPagination = {
@@ -197,6 +200,36 @@ export type CreateRoleRequest = {
    */
   group_owner?: boolean;
   reason?: string;
+};
+
+export type CreateGroupRequest = {
+  /**
+   * @maxLength 255
+   * @minLength 1
+   */
+  requested_group_name: string;
+  /**
+   * @maxLength 1024
+   */
+  requested_group_description?: string;
+  /**
+   * @maxLength 50
+   */
+  requested_group_type: string;
+  /**
+   * @maxLength 20
+   * @minLength 20
+   */
+  requested_app_id?: string;
+  /**
+   * @format date-time
+   */
+  requested_ownership_ending_at?: string;
+  requested_group_tags?: string[];
+  /**
+   * @maxLength 1024
+   */
+  request_reason?: string;
 };
 
 export type DeleteMessage = {
@@ -388,6 +421,36 @@ export type ResolveRoleRequest = {
   reason?: string;
 };
 
+export type ResolveGroupRequest = {
+  approved: boolean;
+  /**
+   * @maxLength 255
+   */
+  resolved_group_name?: string;
+  /**
+   * @maxLength 1024
+   */
+  resolved_group_description?: string;
+  /**
+   * @maxLength 50
+   */
+  resolved_group_type?: string;
+  /**
+   * @maxLength 20
+   * @minLength 20
+   */
+  resolved_app_id?: string;
+  /**
+   * @format date-time
+   */
+  resolved_ownership_ending_at?: string;
+  resolved_group_tags?: string[];
+  /**
+   * @maxLength 1024
+   */
+  resolution_reason?: string;
+};
+
 export type GroupRoleAuditPagination = {
   /**
    * @format url
@@ -541,6 +604,92 @@ export type RoleRequestPagination = {
   total?: number;
 };
 
+export type GroupRequest = {
+  /**
+   * @format date-time
+   */
+  created_at?: string;
+  /**
+   * @maxLength 20
+   */
+  id: string;
+  /**
+   * @format date-time
+   */
+  updated_at?: string;
+  /**
+   * @format date-time
+   */
+  resolved_at?: string | null;
+  /**
+   * @maxLength 8
+   */
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requester?: OktaUser;
+  active_requester?: OktaUser;
+  /**
+   * @maxLength 255
+   */
+  requested_group_name?: string;
+  /**
+   * @maxLength 1024
+   */
+  requested_group_description?: string;
+  /**
+   * @maxLength 50
+   */
+  requested_group_type?: string;
+  requested_app_id?: string | null;
+  /**
+   * @format date-time
+   */
+  requested_ownership_ending_at?: string | null;
+  requested_group_tags?: string[];
+  /**
+   * @maxLength 1024
+   */
+  request_reason?: string;
+  resolver?: OktaUser;
+  active_resolver?: OktaUser;
+  /**
+   * @maxLength 255
+   */
+  resolved_group_name?: string;
+  /**
+   * @maxLength 1024
+   */
+  resolved_group_description?: string;
+  /**
+   * @maxLength 50
+   */
+  resolved_group_type?: string;
+  resolved_app_id?: string | null;
+  /**
+   * @format date-time
+   */
+  resolved_ownership_ending_at?: string | null;
+  resolved_group_tags?: string[];
+  /**
+   * @maxLength 1024
+   */
+  resolution_reason?: string;
+  approved_group?: PolymorphicGroup;
+};
+
+export type GroupRequestPagination = {
+  /**
+   * @format url
+   */
+  next?: string;
+  pages?: number;
+  /**
+   * @format url
+   */
+  prev?: string;
+  results?: GroupRequest[];
+  total?: number;
+};
+
 export type Tag = {
   active_app_tags?: AppTagMap[];
   active_group_tags?: OktaGroupTagMap[];
@@ -611,4 +760,33 @@ export type UserPagination = {
   prev?: string;
   results?: OktaUser[];
   total?: number;
+};
+
+export type AppGroupLifecyclePluginMetadata = {
+  id: string;
+  display_name: string;
+  description: string;
+};
+
+export type AppGroupLifecyclePluginConfigProperty = {
+  display_name: string;
+  help_text?: string;
+  type: 'text' | 'number' | 'boolean';
+  default_value?: any;
+  required?: boolean;
+  validation?: Record<string, any>;
+};
+
+export type AppGroupLifecyclePluginStatusProperty = {
+  display_name: string;
+  help_text?: string;
+  type: 'text' | 'number' | 'date' | 'boolean';
+};
+
+export type AppGroupLifecyclePluginConfigProperties = {
+  [propertyId: string]: AppGroupLifecyclePluginConfigProperty;
+};
+
+export type AppGroupLifecyclePluginStatusProperties = {
+  [propertyId: string]: AppGroupLifecyclePluginStatusProperty;
 };

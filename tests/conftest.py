@@ -31,9 +31,15 @@ register(TagFactory, "tag")
 
 
 @pytest.fixture(scope="session")
-def app() -> Flask:
+def app(request: pytest.FixtureRequest) -> Flask:
     load_dotenv(".testenv")
     app = create_app(testing=True)
+
+    # Check if parametrization is being used (indirect parametrization)
+    require_descriptions = getattr(request, "param", False)
+    # Set the config on the Flask app (schemas read from current_app.config at validation time)
+    app.config["REQUIRE_DESCRIPTIONS"] = require_descriptions
+
     return app
 
 
@@ -48,7 +54,9 @@ def db(app: Flask) -> Generator[SQLAlchemy, None, None]:
         _db.create_all()
 
     access_owner = OktaUserFactory.build(email=app.config["CURRENT_OKTA_USER_EMAIL"])
-    access_app = AppFactory.build(name=App.ACCESS_APP_RESERVED_NAME, description="The Access Portal")
+    access_app = AppFactory.build(
+        name=App.ACCESS_APP_RESERVED_NAME, description=f"The {App.ACCESS_APP_RESERVED_NAME} Portal"
+    )
     access_app_owner_group = AppGroupFactory.build(
         app_id=access_app.id,
         is_owner=True,

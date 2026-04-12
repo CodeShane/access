@@ -10,3 +10,6 @@ export interface AccessConfig {
 const accessConfig: AccessConfig = ACCESS_CONFIG as AccessConfig;
 
 export default accessConfig;
+
+export const appName = APP_NAME;
+export const requireDescriptions = REQUIRE_DESCRIPTIONS;

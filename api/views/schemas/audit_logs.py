@@ -6,6 +6,7 @@ from marshmallow import Schema, fields, pre_dump
 from api.views.schemas.core_schemas import (
     AccessRequestSchema,
     AppSchema,
+    GroupRequestSchema,
     OktaUserGroupMemberSchema,
     OktaUserSchema,
     PolymorphicGroupSchema,
@@ -23,13 +24,18 @@ class EventType(Enum):
     app_create = "APP_CREATE"
     app_delete = "APP_DELETE"
     app_modify_name = "APP_MODIFY_NAME"
+    app_modify_plugin = "APP_MODIFY_PLUGIN"
     app_modify_tags = "APP_MODIFY_TAG"
     group_create = "GROUP_CREATE"
     group_delete = "GROUP_DELETE"
     group_modify_name = "GROUP_MODIFY_NAME"
+    group_modify_plugin = "GROUP_MODIFY_PLUGIN"
     group_modify_type = "GROUP_MODIFY_TYPE"
     group_modify_tags = "GROUP_MODIFY_TAG"
     group_modify_users = "GROUP_MODIFY_USER"
+    group_request_approve = "GROUP_REQUEST_APPROVE"
+    group_request_create = "GROUP_REQUEST_CREATE"
+    group_request_reject = "GROUP_REQUEST_REJECT"
     role_group_modify = "ROLE_GROUP_MODIFY"
     role_request_approve = "ROLE_REQUEST_APPROVE"
     role_request_create = "ROLE_REQUEST_CREATE"
@@ -46,7 +52,7 @@ class AuditLogSchema(Schema):
     current_user_id = fields.Str()
     current_user_email = fields.Str()
 
-    group = fields.Nested(PolymorphicGroupSchema, only=("id", "name", "type", "app.id", "app.name"))
+    group = fields.Nested(PolymorphicGroupSchema, only=("id", "name", "type", "app.id", "app.name", "plugin_data"))
     old_group_name = fields.Str()
     old_group_type = fields.Str()
     group_owners = fields.List(fields.Nested(OktaUserSchema, only=("id", "email")))
@@ -98,11 +104,26 @@ class AuditLogSchema(Schema):
             "approval_ending_at",
         ),
     )
+    group_request = fields.Nested(
+        GroupRequestSchema,
+        only=(
+            "id",
+            "requested_group_name",
+            "requested_group_type",
+            "requested_app_id",
+            "requested_ownership_ending_at",
+            "request_reason",
+            "resolved_ownership_ending_at",
+            "resolution_reason",
+        ),
+    )
     requester = fields.Nested(OktaUserSchema, only=("id", "email"))
 
-    app = fields.Nested(AppSchema, only=("id", "name"))
+    app = fields.Nested(AppSchema, only=("id", "name", "app_group_lifecycle_plugin", "plugin_data"))
     old_app_name = fields.Str()
     owner_id = fields.Str()
+    old_app_group_lifecycle_plugin = fields.Str()
+    old_plugin_data = fields.Dict()
 
     tag = fields.Nested(TagSchema, only=("id", "name", "constraints", "enabled"))
     old_tag = fields.Nested(TagSchema, only=("name", "constraints", "enabled"))
@@ -112,5 +133,10 @@ class AuditLogSchema(Schema):
 
     @pre_dump
     def remove_skip_values(self, data: Dict[str, Any], **kwargs: Any) -> Dict[str, Any]:
-        allowed_keys = ["groups_added_ending_at", "current_user_id", "current_user_email"]
+        allowed_keys = [
+            "groups_added_ending_at",
+            "current_user_id",
+            "current_user_email",
+            "old_app_group_lifecycle_plugin",
+        ]
         return {key: value for key, value in data.items() if value is not None or key in allowed_keys}
